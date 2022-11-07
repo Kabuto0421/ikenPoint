@@ -157,7 +157,7 @@ class TopPage extends ConsumerWidget {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           Text(
-            'アイス券',
+            'アイス',
             style: TextStyle(
                 fontSize: shortestSide / 19,
                 color: Styles.secondaryTextColor,
