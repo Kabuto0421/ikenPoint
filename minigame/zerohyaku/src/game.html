@@ -289,50 +289,44 @@ function sparkle(x, y, t, c = '#ffd84a') {
 }
 
 // ============================================================
-//  サウンド (ふわふわ けい: サイン/さんかくは + リバーブ)
+//  サウンド (のほほん けい: マリンバ + ピチカート、メジャーキー、かわいた おと)
 // ============================================================
 let muted = false;
 const AU = { ctx: null };
+const MASTER_VOL = 1.1;
 const mtof = n => 440 * Math.pow(2, (n - 69) / 12);
 
 function buildAudio() {
   const a = new (window.AudioContext || window.webkitAudioContext)();
   AU.ctx = a;
   const comp = a.createDynamicsCompressor();
-  comp.threshold.value = -18; comp.ratio.value = 3;
+  comp.threshold.value = -16; comp.ratio.value = 3;
   comp.connect(a.destination);
-  AU.master = a.createGain(); AU.master.gain.value = muted ? 0 : 1.4;
+  AU.master = a.createGain(); AU.master.gain.value = muted ? 0 : MASTER_VOL;
   AU.master.connect(comp);
-  // リバーブ (ノイズを けずった インパルス)
-  const len = Math.floor(a.sampleRate * 2.4);
+  // ちいさな へやの ひびき (みじかく、うすく)
+  const len = Math.floor(a.sampleRate * 0.5);
   const ir = a.createBuffer(2, len, a.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
     const d = ir.getChannelData(ch);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 5);
   }
   AU.verb = a.createConvolver(); AU.verb.buffer = ir;
-  const verbOut = a.createGain(); verbOut.gain.value = 0.42;
+  const verbOut = a.createGain(); verbOut.gain.value = 0.18;
   AU.verb.connect(verbOut).connect(AU.master);
-  // ミュージック バス: ローパスで 0/100 の きもちを だす
   AU.music = a.createGain(); AU.music.gain.value = 0.5;
-  AU.musicLP = a.createBiquadFilter(); AU.musicLP.type = 'lowpass'; AU.musicLP.frequency.value = 4000; AU.musicLP.Q.value = 0.4;
-  AU.music.connect(AU.musicLP);
-  AU.musicLP.connect(AU.master);
-  const ms = a.createGain(); ms.gain.value = 0.55; AU.musicLP.connect(ms).connect(AU.verb);
-  AU.padLP = a.createBiquadFilter(); AU.padLP.type = 'lowpass'; AU.padLP.frequency.value = 1100;
-  AU.padLP.connect(AU.music);
-  // こうかおん バス
+  AU.music.connect(AU.master);
+  const ms = a.createGain(); ms.gain.value = 0.5; AU.music.connect(ms).connect(AU.verb);
   AU.sfx = a.createGain(); AU.sfx.gain.value = 0.9;
   AU.sfx.connect(AU.master);
-  const ss = a.createGain(); ss.gain.value = 0.35; AU.sfx.connect(ss).connect(AU.verb);
-  // ノイズ (みず・かぜ・しゃかしゃか よう)
+  const ss = a.createGain(); ss.gain.value = 0.3; AU.sfx.connect(ss).connect(AU.verb);
   const nb = a.createBuffer(1, a.sampleRate * 2, a.sampleRate);
   const nd = nb.getChannelData(0);
   for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
   AU.noiseBuf = nb;
-  // おしっぱなしの ループおと
+  // おしっぱなし の みず / うちわ の おと
   const src = a.createBufferSource(); src.buffer = nb; src.loop = true;
-  AU.holdBP = a.createBiquadFilter(); AU.holdBP.type = 'bandpass'; AU.holdBP.frequency.value = 1500; AU.holdBP.Q.value = 0.7;
+  AU.holdBP = a.createBiquadFilter(); AU.holdBP.type = 'bandpass'; AU.holdBP.frequency.value = 2500; AU.holdBP.Q.value = 0.8;
   AU.holdGain = a.createGain(); AU.holdGain.gain.value = 0;
   src.connect(AU.holdBP).connect(AU.holdGain).connect(AU.sfx);
   src.start();
@@ -346,7 +340,7 @@ function ensureAudio() {
 }
 function setMuted(m) {
   muted = m;
-  if (AU.ctx) AU.master.gain.setTargetAtTime(muted ? 0 : 1.4, AU.ctx.currentTime, 0.05);
+  if (AU.ctx) AU.master.gain.setTargetAtTime(muted ? 0 : MASTER_VOL, AU.ctx.currentTime, 0.05);
 }
 document.addEventListener('visibilitychange', () => {
   if (!AU.ctx) return;
@@ -361,7 +355,6 @@ function voice(o) {
   osc.type = o.type || 'sine';
   osc.frequency.setValueAtTime(o.f, t);
   if (o.f2) osc.frequency.exponentialRampToValueAtTime(o.f2, t + (o.slide || o.dur));
-  if (o.detune) osc.detune.value = o.detune;
   if (o.vib) {
     const l = a.createOscillator(), lg = a.createGain();
     l.frequency.value = o.vib[0]; lg.gain.value = o.vib[1];
@@ -369,7 +362,7 @@ function voice(o) {
     l.start(t); l.stop(t + o.dur + 0.05);
   }
   const gn = a.createGain();
-  const atk = o.attack != null ? o.attack : 0.012;
+  const atk = o.attack != null ? o.attack : 0.004;
   gn.gain.setValueAtTime(0.0001, t);
   gn.gain.linearRampToValueAtTime(o.vol, t + atk);
   gn.gain.exponentialRampToValueAtTime(0.0001, t + o.dur);
@@ -379,94 +372,86 @@ function voice(o) {
   out.connect(o.bus || AU.sfx);
   osc.start(t); osc.stop(t + o.dur + 0.05);
 }
-// オルゴールっぽい ベル
-function bell(n, t, vol, bus, dur = 1.1) {
+// マリンバ: ころん とした みじかい おと
+function mari(n, t, vol, bus, dur = 0.32) {
   const f = mtof(n);
-  voice({ f, t, dur, vol, bus, attack: 0.006 });
-  voice({ f: f * 2, t, dur: dur * 0.45, vol: vol * 0.28, bus, attack: 0.004 });
-  voice({ f: f * 3, t, dur: dur * 0.2, vol: vol * 0.08, bus, attack: 0.003 });
+  voice({ f, t, dur, vol, bus, attack: 0.003 });
+  voice({ f: f * 3.95, t, dur: dur * 0.16, vol: vol * 0.16, bus, attack: 0.002 });
 }
-// やわらかい つまびき
-function pluck(n, t, vol, bus, dur = 0.7) {
+// てっきん: きらっ
+function glock(n, t, vol, bus) {
   const f = mtof(n);
-  voice({ f, t, dur, vol, bus, type: 'triangle', attack: 0.015, lp: 2600 });
-  voice({ f: f * 2, t, dur: dur * 0.5, vol: vol * 0.25, bus, attack: 0.01, detune: 4 });
+  voice({ f, t, dur: 0.35, vol, bus, attack: 0.002 });
+  voice({ f: f * 2.76, t, dur: 0.12, vol: vol * 0.2, bus, attack: 0.002 });
 }
-function pad(notes, t, dur, vol) {
-  const a = AU.ctx; if (!a) return;
-  for (const n of notes) for (const d of [-7, 7]) {
-    const o = a.createOscillator(); o.type = 'triangle';
-    o.frequency.value = mtof(n); o.detune.value = d;
-    const g = a.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(vol, t + dur * 0.35);
-    g.gain.linearRampToValueAtTime(vol * 0.7, t + dur * 0.85);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.7);
-    o.connect(g).connect(AU.padLP);
-    o.start(t); o.stop(t + dur + 0.8);
-  }
+// ピチカート ベース
+function pizz(n, t, vol, bus) {
+  while (n < 38) n += 12;
+  voice({ f: mtof(n), t, dur: 0.22, vol, bus, type: 'triangle', attack: 0.004, lp: 900 });
 }
-function puff(t, vol, freq = 1200, dur = 0.3, q = 0.8, attack = 0.06) {
+function noiseHit(t, vol, freq, dur, q = 1, bus) {
   const a = AU.ctx; if (!a) return;
   const s = a.createBufferSource(); s.buffer = AU.noiseBuf;
   const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
   const g = a.createGain();
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.linearRampToValueAtTime(vol, t + attack);
+  g.gain.linearRampToValueAtTime(vol, t + 0.004);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  s.connect(f).connect(g).connect(AU.sfx);
+  s.connect(f).connect(g).connect(bus || AU.sfx);
   s.start(t, Math.random()); s.stop(t + dur + 0.05);
 }
+const woodblock = (t, vol, bus, f = 880) => voice({ f, f2: f * 0.8, t, dur: 0.06, vol, bus, attack: 0.001 });
 
 const now = () => AU.ctx ? AU.ctx.currentTime : 0;
 const PENTA = [72, 74, 76, 79, 81, 84, 86, 88, 91, 93];
 const sfx = {
-  // ふわっ (100 に なる)
-  press() { if (!AU.ctx) return; const t = now(); voice({ f: 330, f2: 700, t, dur: 0.32, vol: 0.08, attack: 0.03, slide: 0.18 }); voice({ f: 660, f2: 1400, t, dur: 0.2, vol: 0.015, attack: 0.02 }); puff(t, 0.05, 1400, 0.28); },
-  // ぽわん (0 に もどる)
-  release() { if (!AU.ctx) return; const t = now(); voice({ f: 560, f2: 290, t, dur: 0.38, vol: 0.075, attack: 0.008, slide: 0.22 }); voice({ f: 1120, t, dur: 0.12, vol: 0.012 }); },
-  // ちょうどいい あいだの きらきら (しんちょくで おとが あがる)
-  tick(p) { if (!AU.ctx) return; bell(PENTA[Math.min(PENTA.length - 1, Math.floor(p * PENTA.length))], now(), 0.03, AU.sfx, 0.9); },
-  // ぽよよ〜ん (じこ)
-  acc() { if (!AU.ctx) return; const t = now(); voice({ f: 620, f2: 190, t, dur: 0.75, vol: 0.09, vib: [9, 45], slide: 0.7 }); voice({ f: 150, f2: 55, t, dur: 0.3, vol: 0.12, attack: 0.005 }); puff(t, 0.03, 500, 0.4, 0.5, 0.02); },
-  count(hi) { if (!AU.ctx) return; const t = now(); if (hi) { bell(79, t, 0.05); bell(84, t, 0.04); bell(88, t + 0.06, 0.03, AU.sfx, 1.6); } else bell(76, t, 0.045, AU.sfx, 0.6); },
-  clear() { if (!AU.ctx) return; const t = now(); [72, 76, 79, 84, 88].forEach((n, i) => pluck(n, t + i * 0.09, 0.06)); [84, 88, 91].forEach(n => bell(n, t + 0.5, 0.03, AU.sfx, 2.2)); voice({ f: mtof(48), t, dur: 1.8, vol: 0.05, attack: 0.2 }); },
-  fail() { if (!AU.ctx) return; const t = now(); [79, 76, 72].forEach((n, i) => voice({ f: mtof(n), t: t + i * 0.2, dur: 0.5, vol: 0.06, vib: [5, 6], type: 'triangle', lp: 2000 })); voice({ f: 300, f2: 140, t: t + 0.62, dur: 0.8, vol: 0.07, vib: [7, 20], slide: 0.7 }); },
-  ui() { if (!AU.ctx) return; bell(84, now(), 0.035, AU.sfx, 0.5); },
-  step() { if (!AU.ctx) return; voice({ f: rnd(200, 240), f2: 150, t: now(), dur: 0.09, vol: 0.03, attack: 0.004 }); },
+  // ぴゅいっ (100 に なる)
+  press() { if (!AU.ctx) return; const t = now(); voice({ f: 520, f2: 1150, t, dur: 0.16, vol: 0.075, attack: 0.008, slide: 0.12 }); woodblock(t, 0.03, AU.sfx, 1200); },
+  // ぽてっ (0 に もどる)
+  release() { if (!AU.ctx) return; const t = now(); voice({ f: 620, f2: 300, t, dur: 0.13, vol: 0.07, attack: 0.003, slide: 0.1 }); },
+  // ちょうどいい あいだの ころん (しんちょくで おとが あがる)
+  tick(p) { if (!AU.ctx) return; mari(PENTA[Math.min(PENTA.length - 1, Math.floor(p * PENTA.length))] + 12, now(), 0.035, AU.sfx, 0.25); },
+  // ぼよよん! (マンガの バネ)
+  acc() { if (!AU.ctx) return; const t = now(); voice({ f: 220, f2: 520, t, dur: 0.5, vol: 0.09, vib: [17, 70], slide: 0.45 }); woodblock(t, 0.05, AU.sfx, 700); },
+  count(hi) { if (!AU.ctx) return; const t = now(); if (hi) { [72, 76, 79, 84].forEach((n, i) => mari(n, t + i * 0.05, 0.06, AU.sfx, 0.45)); } else mari(79, t, 0.06, AU.sfx, 0.3); },
+  // ちゃららら〜ん ちゃんちゃん♪
+  clear() { if (!AU.ctx) return; const t = now(); [72, 76, 79, 84, 88].forEach((n, i) => mari(n, t + i * 0.07, 0.07)); [79, 84].forEach((n, i) => { mari(n, t + 0.55 + i * 0.16, 0.08, AU.sfx, 0.4); glock(n + 12, t + 0.55 + i * 0.16, 0.03); }); pizz(36, t + 0.55, 0.1); pizz(48, t + 0.71, 0.1); },
+  // ぽぺぽぺ〜 (しっぱい: マンガの トロンボーン)
+  fail() { if (!AU.ctx) return; const t = now(); [67, 66, 65].forEach((n, i) => voice({ f: mtof(n), t: t + i * 0.26, dur: 0.24, vol: 0.07, type: 'triangle', attack: 0.02, lp: 1400 })); voice({ f: mtof(64), f2: mtof(62), t: t + 0.78, dur: 0.75, vol: 0.075, type: 'triangle', attack: 0.02, lp: 1400, vib: [6, 7], slide: 0.7 }); },
+  ui() { if (!AU.ctx) return; mari(84, now(), 0.05, AU.sfx, 0.2); },
+  step() { if (!AU.ctx) return; woodblock(now(), 0.022, AU.sfx, rnd(560, 680)); },
 };
 
-// --- BGM (シーケンサー) ---
+// --- BGM (シーケンサー、8ぶおんぷ たんい) ---
+const C_ = [60, 64, 67], F_ = [60, 65, 69], G_ = [59, 62, 67], Am = [60, 64, 69];
 const TRACKS = {
   title: {
-    bpm: 78, swing: 0.1, perc: false,
-    chords: [[53, 57, 60, 64], [52, 55, 59, 62], [50, 53, 57, 60], [48, 52, 55, 62]],
-    bass: [41, 40, 38, 36], bassSteps: [0, 4],
+    swing: 0.12,
+    chords: [C_, Am, F_, G_], bass: [36, 33, 41, 43],
     mel: [
-      76, 0, 79, 0, 81, 0, 79, 76,   74, 0, 76, 0, 79, 0, 0, 0,
-      77, 0, 76, 0, 74, 0, 72, 74,   76, 0, 0, 0, 72, 0, 0, 0,
-      76, 0, 79, 0, 84, 0, 83, 81,   79, 0, 76, 0, 74, 0, 0, 0,
-      77, 0, 81, 0, 79, 0, 76, 74,   72, 0, 0, 0, 0, 0, 0, 0,
+      72, 0, 76, 0, 79, 0, 76, 0,   77, 76, 74, 0, 72, 0, 0, 0,
+      69, 0, 72, 0, 77, 0, 76, 74,  74, 0, 79, 0, 0, 0, 0, 0,
+      76, 0, 79, 0, 84, 0, 79, 0,   81, 0, 79, 76, 72, 0, 0, 0,
+      77, 0, 76, 0, 74, 0, 72, 0,   74, 0, 71, 0, 72, 0, 0, 0,
     ],
   },
   play: {
-    bpm: 94, swing: 0.14, perc: true,
-    chords: [[48, 52, 55, 59], [45, 52, 55, 60], [53, 57, 60, 64], [50, 55, 59, 62]],
-    bass: [36, 33, 41, 43], bassSteps: [0, 3, 4, 6],
+    swing: 0.1,
+    chords: [C_, F_, G_, C_, Am, F_, G_, G_], bass: [36, 41, 43, 36, 33, 41, 43, 43],
     mel: [
-      72, 0, 76, 79, 0, 76, 74, 0,   72, 0, 69, 0, 72, 0, 0, 0,
-      69, 0, 72, 77, 0, 76, 74, 72,  74, 0, 0, 79, 0, 0, 0, 0,
-      76, 0, 79, 81, 0, 79, 76, 0,   74, 0, 76, 0, 72, 0, 0, 0,
-      69, 0, 72, 0, 74, 76, 77, 0,   79, 0, 0, 0, 0, 0, 0, 0,
+      72, 0, 72, 74, 76, 0, 72, 0,  77, 0, 76, 0, 74, 0, 72, 0,
+      74, 0, 74, 76, 79, 0, 74, 0,  76, 0, 72, 0, 72, 0, 0, 0,
+      76, 0, 76, 77, 79, 0, 76, 0,  81, 0, 79, 0, 77, 0, 76, 0,
+      74, 0, 76, 0, 79, 0, 83, 0,   86, 0, 0, 0, 79, 0, 0, 0,
     ],
   },
 };
-// ステージごとに キー と テンポ を かえる
-const STAGE_MUSIC = [{ tp: 0, bpm: 94 }, { tp: -3, bpm: 86 }, { tp: 2, bpm: 104 }];
-const MUSIC = { key: null, tr: null, tp: 0, bpm: 90, step: 0, nextT: 0 };
+// ステージごとに キー と テンポ (みずやり: C / おふろ: ひくめの F で のんびり / おさんぽ: D で かるく)
+const STAGE_MUSIC = [{ tp: 0, bpm: 120 }, { tp: -7, bpm: 104 }, { tp: 2, bpm: 132 }];
+const MUSIC = { key: null, tr: null, tp: 0, bpm: 110, step: 0, nextT: 0 };
 
 function wantedMusic() {
-  if (mode === 'title' || mode === 'final' || mode === 'loading') return { key: 'title', tr: TRACKS.title, tp: mode === 'final' ? 5 : 0, bpm: TRACKS.title.bpm };
+  if (mode === 'title' || mode === 'final' || mode === 'loading') return { key: mode === 'final' ? 'final' : 'title', tr: TRACKS.title, tp: mode === 'final' ? 5 : 0, bpm: 112 };
   const sm = STAGE_MUSIC[stageIdx] || STAGE_MUSIC[0];
   return { key: 'play' + stageIdx, tr: TRACKS.play, tp: sm.tp, bpm: sm.bpm };
 }
@@ -476,54 +461,55 @@ function musicTick() {
   if (!a || a.state !== 'running') return;
   const w = wantedMusic();
   if (w.key !== MUSIC.key) {
-    Object.assign(MUSIC, w, { step: 0, nextT: a.currentTime + 0.12 });
+    Object.assign(MUSIC, w, { step: 0, nextT: a.currentTime + 0.15 });
     AU.music.gain.cancelScheduledValues(a.currentTime);
     AU.music.gain.setValueAtTime(0.0001, a.currentTime);
-    AU.music.gain.linearRampToValueAtTime(0.5, a.currentTime + 0.9);
+    AU.music.gain.linearRampToValueAtTime(0.5, a.currentTime + 0.4);
   }
   if (MUSIC.nextT < a.currentTime - 0.5) MUSIC.nextT = a.currentTime + 0.05;
   const spb = 60 / MUSIC.bpm / 2;
   while (MUSIC.nextT < a.currentTime + 0.3) {
     const st = MUSIC.step;
-    const t = MUSIC.nextT + (st % 2 ? spb * MUSIC.tr.swing : 0);
-    playStep(st, t, spb);
+    playStep(st, MUSIC.nextT + (st % 2 ? spb * MUSIC.tr.swing : 0));
     MUSIC.nextT += spb;
     MUSIC.step = (st + 1) % MUSIC.tr.mel.length;
   }
 }
 
-function playStep(step, t, spb) {
-  const tr = MUSIC.tr, tp = MUSIC.tp;
+function playStep(step, t) {
+  const tr = MUSIC.tr, tp = MUSIC.tp, B = AU.music;
   const bar = Math.floor(step / 8), pos = step % 8;
   const chord = tr.chords[bar % tr.chords.length].map(n => n + tp);
-  if (pos === 0) pad(chord, t, spb * 8, 0.022);
-  if (tr.bassSteps.includes(pos)) voice({ f: mtof(tr.bass[bar % tr.bass.length] + tp), t, dur: spb * 1.7, vol: pos === 0 ? 0.11 : 0.07, attack: 0.02, bus: AU.music });
+  const root = tr.bass[bar % tr.bass.length] + tp;
+  // ずん・ちゃっ・ずん・ちゃっ
+  if (pos === 0) pizz(root, t, 0.11, B);
+  if (pos === 4) pizz(root + 7, t, 0.09, B);
+  if (pos === 2 || pos === 6) chord.forEach(n => mari(n, t, 0.022, B, 0.18));
   const m = tr.mel[step];
-  if (m) pluck(m + tp, t, 0.055, AU.music, 0.9);
-  // ぜんりょく(100)の ときは きらきらが ふえる
-  const hot = mode === 'play' && S && S.P;
-  if (hot) bell(chord[(step * 3) % chord.length] + 24, t, 0.016, AU.music, 0.6);
-  else if (!tr.perc && pos % 2 === 1 && bar % 2 === 1) bell(chord[(pos >> 1) % chord.length] + 24, t, 0.012, AU.music, 0.8);
-  if (tr.perc && mode === 'play') {
-    if (pos === 0 || pos === 4) voice({ f: 110, f2: 45, t, dur: 0.18, vol: 0.07, attack: 0.004, bus: AU.music });
-    if (pos === 2 || pos === 6) puff(t, 0.012, 6000, 0.08, 0.6, 0.01);
-  }
+  if (m) mari(m + tp, t, 0.07, B, 0.34);
+  const playing = mode === 'play' && S;
+  if (playing) {
+    if (pos % 2 === 1) noiseHit(t, 0.012, 7500, 0.04, 1.5, B);       // しゃかしゃか
+    if (pos === 2 || pos === 6) woodblock(t, 0.018, B, 1000);           // ぽこ
+    if (S.P) {                                                           // 100 の ときは にぎやかに
+      if (m) glock(m + tp + 12, t, 0.025, B);
+      if (pos === 0 || pos === 4) voice({ f: 120, f2: 55, t, dur: 0.12, vol: 0.06, attack: 0.002, bus: B });
+      if (pos % 2 === 0) noiseHit(t, 0.01, 9000, 0.03, 1.5, B);
+    }
+  } else if (bar % 2 === 1 && pos === 7) glock(chord[2] + 12, t, 0.018, B);
 }
 setInterval(musicTick, 60);
 
-// まいフレーム: 0/100 で こもり・ひらき、おしっぱなしの おと
+// まいフレーム: おしっぱなしの みず / うちわ の おと
 function updateAudio(st, s) {
   const a = AU.ctx; if (!a) return;
   const t = a.currentTime;
-  const playing = mode === 'play' && s;
-  const P = playing ? s.P : 0;
-  AU.musicLP.frequency.setTargetAtTime(playing ? (P ? 7000 : 1300) : 4200, t, 0.12);
   let hv = 0;
-  if (playing && P) {
-    if (st.key === 'water') { hv = 0.06; AU.holdBP.frequency.setTargetAtTime(1700, t, 0.05); AU.holdBP.Q.setTargetAtTime(0.6, t, 0.05); }
-    else if (st.key === 'bath') { hv = 0.05; AU.holdBP.frequency.setTargetAtTime(500 + 260 * Math.sin(globalT * 40), t, 0.01); AU.holdBP.Q.setTargetAtTime(1.2, t, 0.05); }
+  if (mode === 'play' && s && s.P) {
+    if (st.key === 'water') { hv = 0.035; AU.holdBP.frequency.setTargetAtTime(2600, t, 0.05); AU.holdBP.Q.setTargetAtTime(0.8, t, 0.05); }
+    else if (st.key === 'bath') { hv = 0.03; AU.holdBP.frequency.setTargetAtTime(1200 + 500 * Math.sin(globalT * 40), t, 0.01); AU.holdBP.Q.setTargetAtTime(1.0, t, 0.05); }
   }
-  AU.holdGain.gain.setTargetAtTime(hv, t, hv ? 0.06 : 0.12);
+  AU.holdGain.gain.setTargetAtTime(hv, t, hv ? 0.04 : 0.08);
 }
 
 // ============================================================
